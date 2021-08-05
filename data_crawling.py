@@ -1,6 +1,7 @@
 import requests
 import json
 import pymysql
+import datetime
 import time
 
 # 최신 패치 버젼 가져오기
@@ -8,11 +9,11 @@ patch_version_url = 'https://ddragon.leagueoflegends.com/api/versions.json'
 r = requests.get(patch_version_url)
 patch_version = r.json()[0]
 
-# API 키
+# API 키(앞 2개 소환사 정보 수집 전용)
 api_keys = ['RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67','RGAPI-4e30da8a-7441-4381-b779-df28834df824' \
            'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1', 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43', 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283']
 
-# 한 소환당 최대 10개의 matchlist 저장 공간
+# matchlist 저장 공간
 matchidlist = list()
 # 한 경기당 10명의 소환사 이름 저장 공간
 summonerslist = list()
@@ -45,19 +46,37 @@ cur = con.cursor()
 queue = 'RANKED_SOLO_5x5'
 
 def limit(r, api):
-    print("속도 제한이 걸려 Sleep 상태로 변경됩니다.")
+    print("속도 제한이 걸려 sleep 상태로 변경됩니다.")
 
     while r.status_code == 429:
-        print("3초만 기다려 주세요.")
-        time.sleep(3)
+        print("10초만 기다려 주세요.")
+        time.sleep(10)
         r = requests.get(api)
         
-    print("속도 제한이 풀려 Sleep 상태를 해제합니다.")
+    print("속도 제한이 풀려 sleep 상태를 해제합니다.")
 
     return r
 
+def list_index_remove(bufferlist):
+    templist = list()
+    templist_2 = list()
+    
+    for i in range(len(bufferlist)):
+        if bufferlist[i][0] not in templist:
+           templist.append(bufferlist[i][0])
+        else:
+           templist_2.append(i)
+           
+    templist_2.reverse()
+
+    for i in templist_2:
+        del bufferlist[i]
+
+    return bufferlist
+
 def get_high_sumonerid(tier, api_key):
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
+
     leagues_api = 'https://kr.api.riotgames.com/lol/league/v4/' + tier + '/by-queue/' + queue + '?api_key=' + api_key
     r = requests.get(leagues_api)
     if r.status_code == 429:
@@ -66,6 +85,7 @@ def get_high_sumonerid(tier, api_key):
     INSERT_tier = str()
     bufferlist = list()
     bufferlist_2 = list()
+    bufferlist_3 = list()
     
     if tier == 'challengerleagues':
         INSERT_tier = 'CHALLENGER'
@@ -74,111 +94,48 @@ def get_high_sumonerid(tier, api_key):
     elif tier =='masterleagues':
         INSERT_tier = 'MASTER'
  
-    # 3000명의 소환사 추가(마스터 티어 최대 수)
-    for i in range(4000):
+    # 해당 티어의 소환사 수 만큼 탐색
+    for i in range(len(r.json()['entries'])):
 
-        # 이미 등록된 소환사 이름이 있는지 필터링
-        sql = 'SELECT nickname FROM summoners WHERE nickname in (%s)'
-
-        try:
-            cur.execute(sql, r.json()['entries'][i]['summonerName'])
+        # DB에 이미 등록된 소환사 이름이 있는지 필터링
+        sql = 'SELECT nickname FROM summoners_tier WHERE nickname in (%s) and patch_version in (%s)'
+        cur.execute(sql, (r.json()['entries'][i]['summonerName'], patch_version))
+        result = cur.fetchall()   
         
-        # 입력받은 상위티어의 소환사를 모두 가져온 경우
-        except IndexError:
-            sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
-            cur.executemany(sql, bufferlist)
-            con.commit()
-            bufferlist.clear()
-            
-            sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
-            cur.executemany(sql, bufferlist_2)
-            con.commit()
-            bufferlist_2.clear()
-            print(i, "개의 소환사를 등록하였습니다.")
-            break
-
+        # 이미 등록된 소환사 이름이 있는 경우
         try:
-            result = cur.fetchall()
-            # 이미 등록된 소환사 이름이 있는 경우
             if result[0][0] == r.json()['entries'][i]['summonerName']:
-                print("summoners table에 이미 등록되어 있습니다.")
+                print(i+1, "번째 소환사: summoners table에 이미 등록되어 있습니다.")
                 continue
 
         # 이미 등록된 소환사 이름이 없는 경우
         except IndexError:
-            print("summoners table에 존재하지 않은 소환사를 찾았습니다.")
+            print(i+1, "번째 소한사: summoners table에 존재하지 않은 소환사를 찾았습니다.")
 
         bufferlist.append([r.json()['entries'][i]['summonerId'], r.json()['entries'][i]['summonerName'], api_key])
         bufferlist_2.append([r.json()['entries'][i]['summonerName'], INSERT_tier, patch_version])
+        bufferlist_3.append(r.json()['entries'][i]['summonerName'])
 
-def get_high_sumonerid_2(tier, api_key):
-    # 데이터를 수집할 소환사의 summonerId와 nickname 수집
-    leagues_api = 'https://kr.api.riotgames.com/lol/league/v4/' + tier + '/by-queue/' + queue + '?api_key=' + api_key
-    r = requests.get(leagues_api)
-    if r.status_code == 429:
-        r = limit(r, leagues_api)
+    bufferlist = list_index_remove(bufferlist)
+    bufferlist_2 = list_index_remove(bufferlist_2)
 
-    print(len(r.json()['entries']))
-    print(len(r.json()['entries']))
-    print(len(r.json()['entries']))
-    
-    INSERT_tier = str()
-    bufferlist = list()
-    bufferlist_2 = list()
-    
-    if tier == 'challengerleagues':
-        INSERT_tier = 'CHALLENGER'
-    elif tier == 'grandmasterleagues':
-        INSERT_tier = 'GRANDMASTER'
-    elif tier =='masterleagues':
-        INSERT_tier = 'MASTER'
- 
-    i = 0
-    # 4000명의 소환사 추가(마스터 티어 최대 수)
-    for z in range(4000):
+    # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 전 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
+    sql = 'DELETE FROM summoners WHERE nickname = (%s)'
+    cur.executemany(sql, bufferlist_3)
+    con.commit()
+    bufferlist_3.clear()
 
-        # 이미 등록된 소환사 이름이 있는지 필터링
-        sql = 'SELECT nickname FROM summoners WHERE nickname in (%s)'
-        
-        try:
-            cur.execute(sql, r.json()['entries'][i]['summonerName'])
-            result = cur.fetchall()
-            # 이미 등록된 소환사 이름이 있는 경우
-            while result[0][0] == r.json()['entries'][i]['summonerName']:
-                print("summoners table에 이미 등록되어 있습니다.")
-                i += 1
-
-                sql = 'select nickname from summoners where nickname in (%s)'
-                cur.execute(sql, r.json()['entries'][i]['summonerName'])
-                result = cur.fetchall()
-
-        # 이미 등록된 소환사 이름이 없는 경우
-        except IndexError:
-            if (tier == 'challengerleagues' and i==len(r.json()['entries'])):
-                print("챌린저 티어의 모든 소환사를 검색했습니다.")
-            elif (tier == 'grandmasterleagues' and i==len(r.json()['entries'])):
-                print("그랜드 마스터 티어의 모든 소환사를 검색했습니다.")
-            elif (tier == 'masterleagues' and i==len(r.json()['entries'])):
-                print("마스터 티어의 모든 소환사를 검색했습니다.")
-            else:
-                print("summoners table에 존재하지 않은 소환사를 찾았습니다.")
-
-        try:
-            sql = 'insert into summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
-            cur.execute(sql, [r.json()['entries'][i]['summonerId'], r.json()['entries'][i]['summonerName'], api_key])
-            con.commit()
-
-            sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
-            cur.execute(sql, [r.json()['entries'][i]['summonerName'], INSERT_tier, patch_version])
-            con.commit()
-
-
-        # ['entries']의 끝에 도달한 경우
-        except IndexError:
-            print("해당 티어의 모든 소환사의 정보를 저장하였습니다.")
-            break
-
-        i += 1
+    # 입력받은 상위티어의 소환사를 모두 가져온 경우
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
+    cur.executemany(sql, bufferlist)
+    con.commit()
+    bufferlist.clear()
+            
+    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
+    cur.executemany(sql, bufferlist_2)
+    con.commit()
+    bufferlist_2.clear()
+    print(len(r.json()['entries']), "개의 소환사를 등록하였습니다.")
 
 def get_low_sumonerid(tier, api_key):
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
@@ -188,6 +145,7 @@ def get_low_sumonerid(tier, api_key):
     bufferlist = list()
     bufferlist_2 = list()
     bufferlist_3 = list()
+    bufferlist_4 = list()
 
     # 해당 티어가 아닌 유저가 존재할 수 있으므로 DELETE 실행
     sql = 'DELETE FROM summoners_tier WHERE patch_version = (%s) and tier LIKE (%s)'
@@ -220,51 +178,12 @@ def get_low_sumonerid(tier, api_key):
 
             print(tier, str(divisionlist[division_number]), "으로 변경 됐습니다.")
 
-        # 1페이지당 최대 300명의 소환사 추가
-        for user_number in range(300):
+        # r.json의 크기만큼 소환사 추가
+        for user_number in len(r.json()):
 
             # 이미 등록된 소환사 이름이 있는지 필터링
             sql = 'SELECT nickname FROM summoners_tier WHERE nickname in (%s) and patch_version in (%s) and tier LIKE (%s)'
-
-            try:
-                cur.execute(sql, (r.json()[user_number]['summonerName'], patch_version, str('%' + tier + '%')))
-            
-            # 해당 page의 끝에 도달한 경우(301번째거나 혹은 마지막 페이지)
-            except IndexError:
-                try:
-                    # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
-                    sql = 'DELETE FROM summoners WHERE nickname = (%s)'
-                    cur.executemany(sql, bufferlist_3)
-                    con.commit()
-                    print("summoners table에 데이터를 지웠습니다.")
-                    bufferlist_3.clear()
-                    
-                    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
-                    cur.executemany(sql, bufferlist)
-                    con.commit()
-                    print("summoners table에 저장하였습니다.")
-                    bufferlist.clear()
-                    
-                    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
-                    cur.executemany(sql, bufferlist_2)
-                    con.commit()
-                    print("summoners_tier table에 저장하였습니다.")
-                    bufferlist_2.clear()
-                    
-                    print(tier, str(divisionlist[division_number]), page, "페이지의 모든 소환사를 검색했습니다.")
-                    page += 1
-                    break
-
-                except IndexError:
-                    print(tier, str(divisionlist[division_number]), page,'페이지에 소, 대문자만 다른 유저가 두 명입니다.')
-                    print(tier, str(divisionlist[division_number]), page,'페이지에 소, 대문자만 다른 유저가 두 명입니다.')
-                    print(tier, str(divisionlist[division_number]), page,'페이지에 소, 대문자만 다른 유저가 두 명입니다.')
-                    print(tier, str(divisionlist[division_number]), page,'페이지에 소, 대문자만 다른 유저가 두 명입니다.')
-                    print(tier, str(divisionlist[division_number]), page,'페이지에 소, 대문자만 다른 유저가 두 명입니다.')
-                    bufferlist.clear()
-                    page += 1
-                    break
-                
+            cur.execute(sql, (r.json()[user_number]['summonerName'], patch_version, str('%' + tier + '%')))            
             result = cur.fetchall()
             
             #이미 등록된 소환사가 있는 경우
@@ -280,24 +199,51 @@ def get_low_sumonerid(tier, api_key):
             bufferlist.append([r.json()[user_number]['summonerId'], r.json()[user_number]['summonerName'], api_key])
             bufferlist_2.append([r.json()[user_number]['summonerName'], tier + ' ' + str(divisionlist[division_number]), patch_version])
             bufferlist_3.append(r.json()[user_number]['summonerName'])
+            bufferlist_4.append([r.json()[user_number]['summonerName'], patch_version])
 
+        bufferlist = list_index_remove(bufferlist)
+        bufferlist_2 = list_index_remove(bufferlist_2)
+      
+        
+        # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
+        sql = 'DELETE FROM summoners WHERE nickname in (%s)'
+        cur.executemany(sql, bufferlist_3)
+        con.commit()
+        print("summoners table에 ㅈㅜㅇㅂㅗㄱㄷㅗㅣㄴㅡㄴ ㅇㅠㅈㅓ 데이터를 지웠습니다.")
+        bufferlist_3.clear()
+                   
+        sql = 'DELETE FROM summoners_tier WHERE nickname in (%s) and pacth_version = (%s)'
+        cur.executemany(sql, bufferlist_4)
+        con.commit()
+        print("summoners_tier table에 ㅈㅜㅇㅂㅗㄱㄷㅗㅣㄴㅡㄴ ㅇㅠㅈㅓ 데이터를 지웠습니다.")
+        bufferlist_4.clear()
+                        
+        sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
+        cur.executemany(sql, bufferlist)
+        con.commit()
+        print("summoners table에 저장하였습니다.")
+        bufferlist.clear()
+                    
+        sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
+        cur.executemany(sql, bufferlist_2)
+        con.commit()
+        print("summoners_tier table에 저장하였습니다.")
+        bufferlist_2.clear()
+                    
+        print(tier, str(divisionlist[division_number]), page, "페이지의 모든 소환사를 검색했습니다.")
+        page += 1
+           
 def get_accountid(num, api_key):
     sql = 'SELECT * FROM summoners WHERE api_number in (%s) and account_id is NULL'
     cur.execute(sql, api_key)
     result = cur.fetchall()
+    
     bufferlist = list()
 
+    if num > len(result):
+        num = len(result)
+
     for i in range(num):
-
-        print(i + 1, '번째 요청 중')
-
-        try:
-            print('summonerid: ' + result[i][0] + '에 대한 API 수집 중')
-
-        except IndexError:
-            print("summoners table에 존재하는 모든 소환사의 API를 요청했습니다")
-            break
-
         accountid_api = 'https://kr.api.riotgames.com/lol/summoner/v4/summoners/' + result[i][0] + '?api_key=' + api_key
         r = requests.get(accountid_api)
         if r.status_code == 429:
@@ -305,13 +251,16 @@ def get_accountid(num, api_key):
 
         #accountid 저장
         bufferlist.append((r.json()['accountId'], r.json()['id']))
+        
       
-        if (i+1) % 100 == 0 or (i+1) == num:
-            sql = 'UPDATE summoners SET account_id = (%s) WHERE encrypt_summoner_id in (%s)'
-            cur.executemany(sql, bufferlist)
-            con.commit()
-            bufferlist.clear()
+        
+    sql = 'UPDATE summoners SET account_id = (%s) WHERE encrypt_summoner_id in (%s)'
+    cur.executemany(sql, bufferlist)
+    con.commit()
+    bufferlist.clear()
+    print("get_accountid complete")
 
+# productionㅋㅣ ㅂㅏㄹㄱㅡㅂ ㅂㅏㄷㅇㅡㅁㅕㄴ ㅅㅏㅇㅛㅇ
 def get_accountid_2(api_key):
     sql = 'SELECT * FROM summoners WHERE api_number in (%s) and account_id is NULL'
     cur.execute(sql, api_key)
@@ -354,42 +303,37 @@ def get_matchid(person_num, game_num, game_date):
     temp_matchidlist = list()
     new_matchidlist = list()
 
+    sql = 'SELECT account_id, api_number FROM summoners WHERE getmatchid_use is NULL and account_id is NOT NULL'
+    cur.execute(sql)
+    result = cur.fetchall()
+    
+    if person_num > len(result):
+        person_num = len(result)
+
     # N명의 소환사 검색
     for i in range(person_num):
         #소환사 선택
-        sql = 'SELECT account_id, api_number FROM summoners WHERE getmatchid_use is NULL'
-        cur.execute(sql)
-        result = cur.fetchall()
-
-        try:
-            matchid_api = 'https://kr.api.riotgames.com/lol/match/v4/matchlists/by-account/' + result[i][0] + '?api_key=' + result[i][1]
-            r = requests.get(matchid_api)
-            if r.status_code == 429:
-                r = limit(r, matchid_api)
-
-        except IndexError:
-            print('summoners에 등록되어 있는 모든 소환사의 match_id를 구했습니다.')
-            break
-        
-        except TypeError:
-            print('account_id가 입력되지 않은 소환사가 있습니다.')
-            continue
-        
+        matchid_api = 'https://kr.api.riotgames.com/lol/match/v4/matchlists/by-account/' + result[i][0] + '?api_key=' + result[i][1]
+        r = requests.get(matchid_api)
+        if r.status_code == 429:
+            r = limit(r, matchid_api)
+             
         # 한 소환사당 game_num개의 matchidlist 저장 방법 구현
         for j in range(game_num):
 
             # 특정 시간 이후
             try:
-                if r.json()['matches'][j]['timestamp'] > game_date and r.json()['matches'][j]['queue'] == 420 :
+                if r.json()['matches'][j]['timestamp'] >= game_date and r.json()['matches'][j]['queue'] == 420 :
                     matchidlist.append(r.json()['matches'][j]['gameId'])
-
-                else:
-                    print('특정 날짜 이후의 경기 수가 충분하지 않거나 솔로 랭크가 아닙니다.')
+                elif r.json()['matches'][j]['timestamp'] < game_date:
+                    print(datetime.datetime.fromtimestamp(game_date/1000), "ㅇㅣㅎㅜㅇㅡㅣ ㄱㅔㅇㅣㅁㅇㅣ ㅇㅓㅂㅅㅅㅡㅂㄴㅣㄷㅏ.")
+                elif r.json()['matches'][j]['queue'] != 420:
+                      print('솔로 랭크가 아닙니다.')
                     
             except IndexError:
-                print('해당 유저의 랭크 게임 경기 수가 충분하지 않습니다.')
+                print('해당 유저의 게임 경기 수가 충분하지 않습니다.')
                 break
-
+        # gamematchid_use ㄷㅡㅇㄹㅗㄱ
         bufferlist.append([1, result[i][0]])
 
     # matchidlist의 중복 요소 제거 
@@ -399,32 +343,29 @@ def get_matchid(person_num, game_num, game_date):
             new_matchidlist.append([temp, patch_version])
 
     # 이미 등록된 matchid 인지 확인
-    for k in range(len(new_matchidlist)):
+    for i in range(len(new_matchidlist)):
         sql = 'SELECT match_id FROM matches WHERE match_id in (%s)'
         try:
-            cur.execute(sql, new_matchidlist[k][0])
+            cur.execute(sql, new_matchidlist[i][0])
 
         except IndexError:
-            if k == len(new_matchidlist):
-                print("matchid를 중복 제거 하여 해당 조건 만큼 검색하였습니다.")
-
-            else:
-                print("??????????")    
+            print("dbㅇㅔ ㄷㅡㅇㄹㅗㄱㄷㅗㅣㄴ matchid를 중복 제거하였습니다.")    
             break
 
         result = cur.fetchall()
-
+        
         while(True):
             try:
                 result[0][0]
-                del new_matchidlist[k]
+                del new_matchidlist[i]
                 print('중복된 matchid가 있어 제거하였습니다.')
                 sql = 'SELECT match_id FROM matches WHERE match_id in (%s)'
-                cur.execute(sql, new_matchidlist[k][0])
+                cur.execute(sql, new_matchidlist[i][0])
                 result = cur.fetchall()
+                break;
             except IndexError:
                 print('matches에 해당 matchid가 없습니다.')
-                break
+                
 
 
     sql = 'INSERT INTO matches(match_id, patch_version) values (%s, %s)'
@@ -436,20 +377,20 @@ def get_matchid(person_num, game_num, game_date):
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
+    print("get_matchid complete")
 
 def get_10_summoners(num, api_key):
     sql = 'SELECT match_id FROM matches WHERE get10summoners_use is NULL'
     cur.execute(sql)
     result = cur.fetchall()
     bufferlist = list()
-    num_2 = int()
 
-    if num < len(result):
-        num_2 = num
-    else:
-        num_2 = len(result)
+    if num > len(result):
+        num = len(result)
 
-    for i in range(num_2):
+        
+
+    for i in range(num):
         try:
             summonername_api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + result[i][0] + '?api_key=' + api_key
         except IndexError:
@@ -464,16 +405,17 @@ def get_10_summoners(num, api_key):
             summonerslist.append([result[i][0], r.json()['participantIdentities'][temp]['player']['summonerName']])
         
         bufferlist.append([1, result[i][0]])
-        if (i+1) % 100 == 0 or (i+1) == num:
-            sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s)'
-            cur.executemany(sql, summonerslist)
-            con.commit()
-            summonerslist.clear()
+        
+    sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s)'
+    cur.executemany(sql, summonerslist)
+    con.commit()
+    summonerslist.clear()
 
-            sql =  'UPDATE matches SET get10summoners_use = (%s) WHERE match_id in (%s)'
-            cur.executemany(sql, bufferlist)
-            con.commit()
-            bufferlist.clear()
+    sql =  'UPDATE matches SET get10summoners_use = (%s) WHERE match_id in (%s)'
+    cur.executemany(sql, bufferlist)
+    con.commit()
+    bufferlist.clear()
+    print("get_10_summoners complete")
             
 def get_item(num, api_key):
     sql = 'SELECT match_id FROM matches WHERE getitem_use is NULL'
@@ -930,7 +872,7 @@ def data_analysis(num, api_key):
             bufferlist.clear()
             bufferlist_2.clear()
 
-get_high_sumonerid_2('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_high_sumonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_sumonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_sumonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_low_sumonerid('DIAMOND', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
