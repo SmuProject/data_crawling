@@ -15,8 +15,6 @@ api_keys = ['RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67','RGAPI-4e30da8a-7441-43
 
 # matchlist 저장 공간
 matchidlist = list()
-# 한 경기당 10명의 소환사 이름 저장 공간
-summonerslist = list()
 # 이긴 팀 챔피언 번호 저장 공간
 winchampionlist = [0, 0, 0, 0, 0]
 # 진 팀 챔피언 번호 저장 공간
@@ -241,7 +239,6 @@ def get_low_summonerid(tier, api_key):
 
     bufferlist = list_index_remove(bufferlist)
     bufferlist_2 = list_index_remove(bufferlist_2)
-
     
     print("DB 데이터를 정리합니다.")
     # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
@@ -489,23 +486,19 @@ def get_matchid(person_num, game_num, game_date):
     print("DB에 match_id를 등록하였습니다.")
 
 def get_10_summoners(num, api_key):
+    print("한 게임당 10명의 소환사 닉네임 수집을 시작합니다.")
     sql = 'SELECT match_id FROM matches WHERE get10summoners_use is NULL'
     cur.execute(sql)
     result = cur.fetchall()
     bufferlist = list()
 
+    summonerslist = list()
+
     if num > len(result):
         num = len(result)
 
-        
-
     for i in range(num):
-        try:
-            summonername_api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + result[i][0] + '?api_key=' + api_key
-        except IndexError:
-            print(num, "개의 matchid의 소환사 이름을 모두 입력했습니다.")
-            break
-          
+        summonername_api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + result[i][0] + '?api_key=' + api_key
         r = requests.get(summonername_api)
         if r.status_code == 429:
             r = limit(r, summonername_api)
@@ -514,7 +507,8 @@ def get_10_summoners(num, api_key):
             summonerslist.append([result[i][0], r.json()['participantIdentities'][temp]['player']['summonerName']])
         
         bufferlist.append([1, result[i][0]])
-        
+        print(i+1, '번째 match_id의 소환사 닉네임을 가져오고 있습니다.')
+
     sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s)'
     cur.executemany(sql, summonerslist)
     con.commit()
@@ -524,7 +518,16 @@ def get_10_summoners(num, api_key):
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
-    print("get_10_summoners complete")
+    print("한 게임당 10명의 소환사 닉네임을 DB에 저장하였습니다.")
+
+    # matchid당 소환사 10명의 티어 UPDATE 하기(summoners_tier에 없으면 UPDATE 불가(챌린저 유저의 matchid에는 DIAMOND I가 있을 수 있으므로))
+    sql = 'UPDATE match_summoners as A, \
+          (SELECT match_id, match_summoners.nickname, summoners_tier.tier FROM match_summoners JOIN summoners_tier ON match_summoners.nickname = summoners_tier.nickname and match_summoners.tier is NULL) B \
+          SET A.tier = B.tier \
+          WHERE A.nickname = B.nickname and A.match_id = B.match_id'
+    cur.execute(sql)
+    con.commit()
+    print("등록한 10명의 소환사의 티어를 UPDATE 하였습니다.")
             
 def get_item(num, api_key):
     sql = 'SELECT match_id FROM matches WHERE getitem_use is NULL'
@@ -989,7 +992,7 @@ def data_analysis(num, api_key):
 # while(True):
     # get_accountid(50, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
     # get_matchid(10, 20, 1622613600) 
-    # get_10_summoners(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
+get_10_summoners(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
     # get_overall(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
     # data_analysis(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_item(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
