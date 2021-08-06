@@ -458,6 +458,7 @@ def get_matchid(person_num, game_num, game_date):
             try:
                 if r.json()['matches'][j]['timestamp'] >= game_date and r.json()['matches'][j]['queue'] == 420 :
                     matchidlist.append(r.json()['matches'][j]['gameId'])
+                    print("조건에 맞는 match_id를 찾았습니다.")
                 elif r.json()['matches'][j]['timestamp'] < game_date:
                     print(datetime.datetime.fromtimestamp(game_date/1000), "이후의 게임이 없습니다..")
                 elif r.json()['matches'][j]['queue'] != 420:
@@ -470,38 +471,13 @@ def get_matchid(person_num, game_num, game_date):
         bufferlist.append([1, result[i][0]])
 
     # matchidlist의 중복 요소 제거 
-    for temp in matchidlist:
-        if temp not in temp_matchidlist:
-            temp_matchidlist.append(temp)
-            new_matchidlist.append([temp, patch_version])
+    for matchid in matchidlist:
+        if matchid not in temp_matchidlist:
+            temp_matchidlist.append(matchid)
+            new_matchidlist.append([matchid, patch_version])
 
-    # 이미 등록된 matchid 인지 확인
-    for i in range(len(new_matchidlist)):
-        sql = 'SELECT match_id FROM matches WHERE match_id in (%s)'
-        try:
-            cur.execute(sql, new_matchidlist[i][0])
-
-        except IndexError:
-            print("db에 등록된 matchid를 중복 제거하였습니다.")    
-            break
-
-        result = cur.fetchall()
-        
-        while(True):
-            try:
-                result[0][0]
-                del new_matchidlist[i]
-                print('중복된 matchid가 있어 제거하였습니다.')
-                sql = 'SELECT match_id FROM matches WHERE match_id in (%s)'
-                cur.execute(sql, new_matchidlist[i][0])
-                result = cur.fetchall()
-                break;
-            except IndexError:
-                print('matches에 해당 matchid가 없습니다.')
-                
-
-
-    sql = 'INSERT INTO matches(match_id, patch_version) values (%s, %s)'
+    # DB에 중복 PK가 없으면 INSERT, 중복이면 UPDATE 실행
+    sql = 'INSERT INTO matches(match_id, patch_version) values (%s, %s) ON DUPLICATE KEY UPDATE patch_version = ' + "'" + patch_version + "'"
     cur.executemany(sql, new_matchidlist)
     con.commit()
     new_matchidlist.clear()
@@ -510,7 +486,7 @@ def get_matchid(person_num, game_num, game_date):
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
-    print("get_matchid complete")
+    print("DB에 match_id를 등록하였습니다.")
 
 def get_10_summoners(num, api_key):
     sql = 'SELECT match_id FROM matches WHERE get10summoners_use is NULL'
@@ -1011,8 +987,8 @@ def data_analysis(num, api_key):
 # get_low_summonerid('DIAMOND', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 
 # while(True):
-get_accountid(30, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
-# get_matchid(10, 20, 1622613600) 
+    # get_accountid(50, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
+    # get_matchid(10, 20, 1622613600) 
     # get_10_summoners(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
     # get_overall(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
     # data_analysis(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
