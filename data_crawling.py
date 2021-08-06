@@ -251,7 +251,7 @@ def get_low_summonerid(tier, api_key):
     print("summoners table에 중복된 유저 데이터를 지웠습니다.")
     bufferlist_3.clear()
 
-    # 전 page에서 등록된 경우 혹은 대소문자가 다른 경우, 데이터를 삭제한다.
+    # 전 page에서 등록된 경우 혹은 대소문자가 다른 경우, 데이터를 삭제한다.(한 페이지씩 등록할 때 사용)
     # sql = 'DELETE FROM summoners_tier WHERE nickname in (%s) and patch_version = (%s)'
     # cur.executemany(sql, bufferlist_4)
     # con.commit()
@@ -368,7 +368,7 @@ def get_low_summonerid_2(tier, api_key):
         page += 1
            
 def get_accountid(num, api_key):
-    sql = 'SELECT * FROM summoners WHERE api_number in (%s) and account_id is NULL'
+    sql = 'SELECT encrypt_summoner_id, summoners.nickname FROM summoners JOIN summoners_tier ON summoners.nickname = summoners_tier.nickname and account_id is NULL and api_number = (%s)'
     cur.execute(sql, api_key)
     result = cur.fetchall()
     
@@ -384,6 +384,7 @@ def get_accountid(num, api_key):
             r = limit(r, accountid_api)
 
         #accountid 저장
+        print(result[i][1], "소환사의 account_id를 수집 중입니다.")
         bufferlist.append((r.json()['accountId'], r.json()['id']))
         
     sql = 'UPDATE summoners SET account_id = (%s) WHERE encrypt_summoner_id in (%s)'
@@ -458,14 +459,14 @@ def get_matchid(person_num, game_num, game_date):
                 if r.json()['matches'][j]['timestamp'] >= game_date and r.json()['matches'][j]['queue'] == 420 :
                     matchidlist.append(r.json()['matches'][j]['gameId'])
                 elif r.json()['matches'][j]['timestamp'] < game_date:
-                    print(datetime.datetime.fromtimestamp(game_date/1000), "ㅇㅣㅎㅜㅇㅡㅣ ㄱㅔㅇㅣㅁㅇㅣ ㅇㅓㅂㅅㅅㅡㅂㄴㅣㄷㅏ.")
+                    print(datetime.datetime.fromtimestamp(game_date/1000), "이후의 게임이 없습니다..")
                 elif r.json()['matches'][j]['queue'] != 420:
-                      print('솔로 랭크가 아닙니다.')
+                    print('솔로 랭크가 아닙니다.')
                     
             except IndexError:
                 print('해당 유저의 게임 경기 수가 충분하지 않습니다.')
                 break
-        # gamematchid_use ㄷㅡㅇㄹㅗㄱ
+        # gamematchid_use 등록
         bufferlist.append([1, result[i][0]])
 
     # matchidlist의 중복 요소 제거 
@@ -481,7 +482,7 @@ def get_matchid(person_num, game_num, game_date):
             cur.execute(sql, new_matchidlist[i][0])
 
         except IndexError:
-            print("dbㅇㅔ ㄷㅡㅇㄹㅗㄱㄷㅗㅣㄴ matchid를 중복 제거하였습니다.")    
+            print("db에 등록된 matchid를 중복 제거하였습니다.")    
             break
 
         result = cur.fetchall()
@@ -1004,13 +1005,13 @@ def data_analysis(num, api_key):
             bufferlist.clear()
             bufferlist_2.clear()
 
-get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_low_summonerid('DIAMOND', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 
 # while(True):
-# get_accountid(10, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
+get_accountid(30, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
 # get_matchid(10, 20, 1622613600) 
     # get_10_summoners(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
     # get_overall(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
