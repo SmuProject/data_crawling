@@ -74,7 +74,7 @@ def list_index_remove(bufferlist):
 
     return bufferlist
 
-def get_high_sumonerid(tier, api_key):
+def get_high_summonerid(tier, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 O
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
 
@@ -131,7 +131,7 @@ def get_high_sumonerid(tier, api_key):
 
     print(len(r.json()['entries']), "개의 소환사 정보를 DB에 등록하였습니다.")
 
-def get_high_sumonerid_2(tier, api_key):
+def get_high_summonerid_2(tier, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 X
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
 
@@ -197,7 +197,7 @@ def get_high_sumonerid_2(tier, api_key):
     bufferlist_2.clear()
     print(len(r.json()['entries']), "개의 소환사 정보를 DB에 등록하였습니다.")
 
-def get_low_sumonerid(tier, api_key):
+def get_low_summonerid(tier, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 O
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
     # divisionlist = ['I', 'II', 'III', 'IV']
@@ -241,6 +241,7 @@ def get_low_sumonerid(tier, api_key):
 
     bufferlist = list_index_remove(bufferlist)
     bufferlist_2 = list_index_remove(bufferlist_2)
+
     
     print("DB 데이터를 정리합니다.")
     # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
@@ -250,7 +251,7 @@ def get_low_sumonerid(tier, api_key):
     print("summoners table에 중복된 유저 데이터를 지웠습니다.")
     bufferlist_3.clear()
 
-    # 전 page에서 등록된 경우 혹은 대소문자가 다른 경우, 데이터를 삭제한다.        
+    # 전 page에서 등록된 경우 혹은 대소문자가 다른 경우, 데이터를 삭제한다.
     # sql = 'DELETE FROM summoners_tier WHERE nickname in (%s) and patch_version = (%s)'
     # cur.executemany(sql, bufferlist_4)
     # con.commit()
@@ -269,7 +270,7 @@ def get_low_sumonerid(tier, api_key):
     print("summoners_tier table에 저장하였습니다.")
     bufferlist_2.clear()
 
-def get_low_sumonerid_2(tier, api_key):
+def get_low_summonerid_2(tier, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 X
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
     divisionlist = ['I', 'II', 'III', 'IV']
@@ -385,13 +386,11 @@ def get_accountid(num, api_key):
         #accountid 저장
         bufferlist.append((r.json()['accountId'], r.json()['id']))
         
-      
-        
     sql = 'UPDATE summoners SET account_id = (%s) WHERE encrypt_summoner_id in (%s)'
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
-    print("get_accountid complete")
+    print("account_id를 업데이트 했습니다.")
 
 def get_accountid_2(api_key):
     # production키 발급 받으면 사용
@@ -1005,10 +1004,10 @@ def data_analysis(num, api_key):
             bufferlist.clear()
             bufferlist_2.clear()
 
-# get_high_sumonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_high_sumonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_high_sumonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_sumonerid('DIAMOND', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 
 # while(True):
 # get_accountid(10, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
