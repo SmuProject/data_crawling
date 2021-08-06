@@ -47,8 +47,8 @@ def limit(r, api):
     print("속도 제한이 걸려 sleep 상태로 변경됩니다.")
 
     while r.status_code == 429:
-        print("10초만 기다려 주세요.")
-        time.sleep(10)
+        print("15초만 기다려 주세요.")
+        time.sleep(15)
         r = requests.get(api)
         
     print("속도 제한이 풀려 sleep 상태를 해제합니다.")
@@ -129,72 +129,6 @@ def get_high_summonerid(tier, api_key):
 
     print(len(r.json()['entries']), "개의 소환사 정보를 DB에 등록하였습니다.")
 
-def get_high_summonerid_2(tier, api_key):
-    # 데이터 저장 전, 저장되어 있던 데이터 삭제 X
-    # 데이터를 수집할 소환사의 summonerId와 nickname 수집
-
-    print("소환사의 기본 정보 수집을 시작합니다.")
-    leagues_api = 'https://kr.api.riotgames.com/lol/league/v4/' + tier + '/by-queue/' + queue + '?api_key=' + api_key
-    r = requests.get(leagues_api)
-    if r.status_code == 429:
-        r = limit(r, leagues_api)
-
-    INSERT_tier = str()
-    bufferlist = list()
-    bufferlist_2 = list()
-    bufferlist_3 = list()
-    
-    if tier == 'challengerleagues':
-        INSERT_tier = 'CHALLENGER'
-    elif tier == 'grandmasterleagues':
-        INSERT_tier = 'GRANDMASTER'
-    elif tier =='masterleagues':
-        INSERT_tier = 'MASTER'
-
-
-    # 해당 티어의 소환사 수 만큼 탐색
-    for i in range(len(r.json()['entries'])):
-
-        # DB에 이미 등록된 소환사 이름이 있는지 필터링
-        sql = 'SELECT nickname FROM summoners_tier WHERE nickname in (%s) and patch_version in (%s)'
-        cur.execute(sql, (r.json()['entries'][i]['summonerName'], patch_version))
-        result = cur.fetchall()   
-        
-        bufferlist.append([r.json()['entries'][i]['summonerId'], r.json()['entries'][i]['summonerName'], api_key, r.json()['entries'][i]['summonerName']])
-        bufferlist_3.append(r.json()['entries'][i]['summonerName'])
-
-        # 이미 등록된 소환사 이름이 있는 경우
-        try:
-            if result[0][0] == r.json()['entries'][i]['summonerName']:
-                print(i+1, "번째 소환사: summoners_tier table에 이미 등록되어 있습니다.")
-                continue
-
-        # 이미 등록된 소환사 이름이 없는 경우
-        except IndexError:
-            print(i+1, "번째 소한사: summoners_tier table에 존재하지 않은 소환사를 찾았습니다.")
-            bufferlist_2.append([r.json()['entries'][i]['summonerName'], INSERT_tier, patch_version])
-
-    bufferlist = list_index_remove(bufferlist)
-    bufferlist_2 = list_index_remove(bufferlist_2)
-
-    # # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 전 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
-    # sql = 'DELETE FROM summoners WHERE nickname = (%s)'
-    # cur.executemany(sql, bufferlist_3)
-    # con.commit()
-    # bufferlist_3.clear()
-
-    # 입력받은 상위티어의 소환사를 모두 가져온 경우
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE nickname = (%s)' 
-    cur.executemany(sql, bufferlist)
-    con.commit()
-    bufferlist.clear()
-            
-    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
-    cur.executemany(sql, bufferlist_2)
-    con.commit()
-    bufferlist_2.clear()
-    print(len(r.json()['entries']), "개의 소환사 정보를 DB에 등록하였습니다.")
-
 def get_low_summonerid(tier, division, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 O
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
@@ -255,7 +189,7 @@ def get_low_summonerid(tier, division, api_key):
     # print("summoners_tier table에 중복된 유저 데이터를 지웠습니다.")
     # bufferlist_4.clear()
                     
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1'
     cur.executemany(sql, bufferlist)
     con.commit()
     print("summoners table에 저장하였습니다.")
@@ -266,103 +200,6 @@ def get_low_summonerid(tier, division, api_key):
     con.commit()
     print("summoners_tier table에 저장하였습니다.")
     bufferlist_2.clear()
-
-def get_low_summonerid_2(tier, api_key):
-    # 데이터 저장 전, 저장되어 있던 데이터 삭제 X
-    # 데이터를 수집할 소환사의 summonerId와 nickname 수집
-    divisionlist = ['I', 'II', 'III', 'IV']
-    division_number = 0
-    page = 1
-    bufferlist = list()
-    bufferlist_2 = list()
-    bufferlist_3 = list()
-    bufferlist_4 = list()
-
-    # 실행 날짜 기준으로 해당 티어가 아닌 유저가 존재할 수 있으므로 DELETE 실행
-    sql = 'DELETE FROM summoners_tier WHERE patch_version = (%s) and tier LIKE (%s)'
-    cur.execute(sql, (patch_version, str('%' + tier + '%')))
-    con.commit()
-    
-    while(True):
-        leagues_api = 'https://kr.api.riotgames.com/lol/league/v4/entries/' + queue + '/' + tier + '/' + str(divisionlist[division_number]) + '?page=' + str(page) + '&api_key=' + api_key
-        r = requests.get(leagues_api)
-        if r.status_code == 429:
-            r = limit(r, leagues_api)
-    
-        # 해당 티어 division의 페이지에 값이 있는지 확인
-        try:
-            r.json()[0]
-            print(tier, str(divisionlist[division_number]), "page", page ,"값이 존재합니다.")
-        
-        # 없으면 해당 티어 divsion이 끝난 것이므로 다음 division으로 변경 
-        except IndexError:
-            division_number += 1
-            page = 1
-            
-            # division_number 가 4가 되면 while문 탈출
-            if division_number == 4:
-                break
-            leagues_api = 'https://kr.api.riotgames.com/lol/league/v4/entries/' + queue + '/' + tier + '/' + str(divisionlist[division_number]) + '?page=' + str(page) + '&api_key=' + api_key
-            r = requests.get(leagues_api)
-            if r.status_code == 429:
-                r = limit(r, leagues_api)
-
-            print(tier, str(divisionlist[division_number]), "으로 변경 됐습니다.")
-
-        # r.json의 크기만큼 소환사 추가
-        for user_number in len(r.json()):
-
-            # 이미 등록된 소환사 이름이 있는지 필터링
-            sql = 'SELECT nickname FROM summoners_tier WHERE nickname in (%s) and patch_version in (%s) and tier LIKE (%s)'
-            cur.execute(sql, (r.json()[user_number]['summonerName'], patch_version, str('%' + tier + '%')))            
-            result = cur.fetchall()
-            
-            #이미 등록된 소환사가 있는 경우
-            try:    
-                if result[0][0] == r.json()[user_number]['summonerName']:
-                    print("summoners_tier table에 이미 등록되어 있습니다.")
-                    continue
-
-            # 이미 등록된 소환사 이름이 없는 경우
-            except IndexError:
-                print("summoners_tier table에 존재하지 않은 소환사를 찾았습니다.")
-
-            bufferlist.append([r.json()[user_number]['summonerId'], r.json()[user_number]['summonerName'], api_key])
-            bufferlist_2.append([r.json()[user_number]['summonerName'], tier + ' ' + str(divisionlist[division_number]), patch_version])
-            bufferlist_3.append(r.json()[user_number]['summonerName'])
-            bufferlist_4.append([r.json()[user_number]['summonerName'], patch_version])
-
-        bufferlist = list_index_remove(bufferlist)
-        bufferlist_2 = list_index_remove(bufferlist_2)
-      
-        
-        # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
-        sql = 'DELETE FROM summoners WHERE nickname in (%s)'
-        cur.executemany(sql, bufferlist_3)
-        con.commit()
-        print("summoners table에 중복된 유저 데이터를 지웠습니다.")
-        bufferlist_3.clear()
-                   
-        sql = 'DELETE FROM summoners_tier WHERE nickname in (%s) and pacth_version = (%s)'
-        cur.executemany(sql, bufferlist_4)
-        con.commit()
-        print("summoners_tier table에 중복된 유저 데이터를 지웠습니다.")
-        bufferlist_4.clear()
-                        
-        sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
-        cur.executemany(sql, bufferlist)
-        con.commit()
-        print("summoners table에 저장하였습니다.")
-        bufferlist.clear()
-                    
-        sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
-        cur.executemany(sql, bufferlist_2)
-        con.commit()
-        print("summoners_tier table에 저장하였습니다.")
-        bufferlist_2.clear()
-                    
-        print(tier, str(divisionlist[division_number]), page, "페이지의 모든 소환사를 검색했습니다.")
-        page += 1
            
 def get_accountid(num, api_key):
     sql = 'SELECT encrypt_summoner_id, summoners.nickname FROM summoners JOIN summoners_tier ON summoners.nickname = summoners_tier.nickname and account_id is NULL and api_number = (%s)'
@@ -509,7 +346,7 @@ def get_10_summoners(num, api_key):
         bufferlist.append([1, result[i][0]])
         print(i+1, '번째 match_id의 소환사 닉네임을 가져오고 있습니다.')
 
-    sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s)'
+    sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s) ON DUPLICATE KEY UPDATE update_check = 1'
     cur.executemany(sql, summonerslist)
     con.commit()
     summonerslist.clear()
@@ -535,14 +372,11 @@ def get_item(num, api_key):
     result = cur.fetchall() 
     bufferlist = list()
     bufferlist_2 = list()
-    num_2 = int()
 
-    if num < len(result):
-        num_2 = num
-    else:
-        num_2 = len(result)
+    if num > len(result):
+        num = len(result)
 
-    for k in range(num_2):
+    for k in range(num):
         try:
             item_api = 'https://kr.api.riotgames.com/lol/match/v4/timelines/by-match/' + result[k][0] + '?api_key=' +  api_key
             r = requests.get(item_api)
@@ -576,81 +410,61 @@ def get_item(num, api_key):
                    6672, 6673, 6675, 6676, 6691, 6692, 6693, 6694, 6695]
 
         dict = {1:[], 2:[], 3:[], 4:[], 5:[], 6:[], 7:[], 8:[], 9:[], 10:[]}
-        i = 0
+        
 
-        while (True):
-            j = 0
-            try:
-                r.json()['frames'][i]
+        for i in range(len(r.json()['frames'])):
+            for j in range (len(r.json()['frames'][i]['events'])):
 
-            except IndexError:
-                print('matchid ' + result[k][0] + '의 아이템 목록을 정리했습니다.')
-                break
+                # print('timestamp:', r.json()['frames'][i]['events'][j]['timestamp'])
+                if (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_PURCHASED'):
+                    if r.json()['frames'][i]['events'][j]['itemId'] in buyitems:
+                        continue
 
-            while (True):
-                try:
-                    # print('timestamp:', r.json()['frames'][i]['events'][j]['timestamp'])
-                    if (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_PURCHASED'):
-                        if r.json()['frames'][i]['events'][j]['itemId'] in buyitems:
-                            j += 1
-                            continue
-                        number = r.json()['frames'][i]['events'][j]['participantId']
-                        dict[number].append(r.json()['frames'][i]['events'][j]['itemId'])
+                    number = r.json()['frames'][i]['events'][j]['participantId']
+                    dict[number].append(r.json()['frames'][i]['events'][j]['itemId'])
 
-                    elif (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_UNDO'):
-                        if r.json()['frames'][i]['events'][j]['beforeId'] in sellitems:
-                            j += 1
-                            continue
-                          
-                        number = r.json()['frames'][i]['events'][j]['participantId']
+                elif (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_UNDO'):
+                    if r.json()['frames'][i]['events'][j]['beforeId'] in sellitems:
+                        continue
                         
-                        if r.json()['frames'][i]['events'][j]['beforeId'] in dict[number]:
-                            dict[number].remove( r.json()['frames'][i]['events'][j]['beforeId'])
-                            
-                        elif r.json()['frames'][i]['events'][j]['afterId'] in dict[number]:
-                            dict[number].append( r.json()['frames'][i]['events'][j]['afterId'])
+                    number = r.json()['frames'][i]['events'][j]['participantId']
+                    if r.json()['frames'][i]['events'][j]['beforeId'] in dict[number]:
+                        dict[number].remove( r.json()['frames'][i]['events'][j]['beforeId'])          
+                    elif r.json()['frames'][i]['events'][j]['afterId'] in dict[number]:
+                        dict[number].append( r.json()['frames'][i]['events'][j]['afterId'])
 
-                    elif (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_SOLD'):
-                        if r.json()['frames'][i]['events'][j]['itemId'] in sellitems:
-                            j += 1
-                            continue
-                          
-                        number = r.json()['frames'][i]['events'][j]['participantId']
+                elif (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_SOLD'):
+                    if r.json()['frames'][i]['events'][j]['itemId'] in sellitems:
+                        continue
+                        
+                    number = r.json()['frames'][i]['events'][j]['participantId']
+                    try:
+                        dict[number].remove(r.json()['frames'][i]['events'][j]['itemId'])
+                        
+                    except ValueError:
+                        continue
+
+                elif (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_DESTROYED'):
+                    number = r.json()['frames'][i]['events'][j]['participantId']
+                    if r.json()['frames'][i]['events'][j]['itemId'] in sellitems:
+                        continue
+                    elif r.json()['frames'][i]['events'][j]['itemId'] in nexttiems:
                         try:
                             dict[number].remove(r.json()['frames'][i]['events'][j]['itemId'])
-                            
+                            dict[number].append(r.json()['frames'][i]['events'][j]['itemId'] + 1)
+                        
                         except ValueError:
-                            j += 1
                             continue
 
-                    elif (r.json()['frames'][i]['events'][j]['type'] == 'ITEM_DESTROYED'):
-                        number = r.json()['frames'][i]['events'][j]['participantId']
-                        if r.json()['frames'][i]['events'][j]['itemId'] in sellitems:
-                            j += 1
+                    else:
+                        try:
+                            dict[number].remove(r.json()['frames'][i]['events'][j]['itemId'])
+
+                        except ValueError:
                             continue
 
-                        elif r.json()['frames'][i]['events'][j]['itemId'] in nexttiems:
-                            try:
-                                dict[number].remove(r.json()['frames'][i]['events'][j]['itemId'])
-                                dict[number].append(r.json()['frames'][i]['events'][j]['itemId'] + 1)
-                            
-                            except ValueError:
-                                j += 1
-                                continue
-
-                        else:
-                            try:
-                                dict[number].remove(r.json()['frames'][i]['events'][j]['itemId'])
-
-                            except ValueError:
-                                j += 1
-                                continue
-
-                except IndexError:
-                    print(i+1, '번째의 frame 이벤트를 모두 검색하였습니다.')
-                    break
-                j += 1
-            i += 1
+            print(i+1, '번째의 frame 이벤트를 모두 검색하였습니다.')
+        print('matchid ' + result[k][0] + '의 아이템 목록을 정리했습니다.')
 
         # 코어템 저장 및 중복 제거
         new_coreitems = {1:[0,0,0,0,0,0], 2:[0,0,0,0,0,0], 3:[0,0,0,0,0,0], 4:[0,0,0,0,0,0], 5:[0,0,0,0,0,0], \
@@ -695,18 +509,18 @@ def get_item(num, api_key):
 
         bufferlist_2.append((1, result[k][0]))
 
-        if (k+1) % 5 == 0 or (k+1) == num:
-            sql = 'INSERT INTO coreitems(match_id, champion_id, win, item_1, item_2, item_3, item_4, item_5, item_6) values(%s, %s, %s, %s, %s, %s, %s, %s, %s)'
-            cur.executemany(sql, bufferlist)
-            con.commit()
+      
+    sql = 'INSERT INTO coreitems(match_id, champion_id, win, item_1, item_2, item_3, item_4, item_5, item_6) values(%s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1'
+    cur.executemany(sql, bufferlist)
+    con.commit()
 
-            sql = 'UPDATE matches SET getitem_use = (%s) WHERE match_id in (%s)'
-            cur.executemany(sql, bufferlist_2)
-            con.commit()
+    sql = 'UPDATE matches SET getitem_use = (%s) WHERE match_id in (%s)'
+    cur.executemany(sql, bufferlist_2)
+    con.commit()
 
-            bufferlist.clear()
-            bufferlist_2.clear()
-            print("코어 아이템 테이블에 데이터를 넣었습니다.")
+    bufferlist.clear()
+    bufferlist_2.clear()
+    print("코어 아이템 테이블에 데이터를 넣었습니다.")
 
 def get_overall(num, api_key):
     #매치 테이블에서 매치아이디 가져오기
@@ -885,7 +699,7 @@ def get_overall(num, api_key):
                 perk1, perk1_var1, perk1_var2, perk1_var3, perk2, perk2_var1, perk2_var2, perk2_var3, perk3, perk3_var1, perk3_var2, perk3_var3,\
                 perk4, perk4_var1, perk4_var2, perk4_var3, perk5, perk5_var1, perk5_var2, perk5_var3, perk_primary_style, perk_sub_style, stat_perk0, stat_perk1, stat_perk2, \
                 my_champ, participant_1, participant_2, participant_3, participant_4, participant_5, participant_6, participant_7, participant_8, participant_9, participant_10, patch_version)\
-                values(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+                values(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1'''
             cur.executemany(sql, overalllist)
             con.commit()
             overalllist.clear()
@@ -973,7 +787,7 @@ def data_analysis(num, api_key):
         if (i+1) % 80 == 0 or (i+1) == num:
 
             #winrate_by_lane 테이블에 라인 및 챔피언 번호 저장
-            sql = 'INSERT INTO winrate_summoner(match_id, game_duration, win_or_lose, champion_id, champion_lane) values(%s, %s, %s, %s, %s)' 
+            sql = 'INSERT INTO winrate_summoner(match_id, game_duration, win_or_lose, champion_id, champion_lane) values(%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1' 
             cur.executemany(sql, bufferlist)
             con.commit()
 
@@ -984,13 +798,14 @@ def data_analysis(num, api_key):
             bufferlist.clear()
             bufferlist_2.clear()
 
-get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+# get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+# get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+# get_low_summonerid('PLATINUM', 'I', 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
 
 while(True):
 
@@ -1010,3 +825,22 @@ while(True):
     # get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
     # data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
     # get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+
+# while(True):
+    
+#     # get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+#     # get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+#     get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+#     # get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+#     # get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+#     get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+
+#     # get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+#     # get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+#     # data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+#     # get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+
+#     get_10_summoners(23, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+#     get_overall(23, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+#     data_analysis(23, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+#     get_item(21, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
