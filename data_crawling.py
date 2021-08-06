@@ -10,8 +10,8 @@ r = requests.get(patch_version_url)
 patch_version = r.json()[0]
 
 # API 키(앞 2개 소환사 정보 수집 전용)
-api_keys = ['RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67','RGAPI-4e30da8a-7441-4381-b779-df28834df824' \
-           'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1', 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43', 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283']
+api_keys = ['RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67','RGAPI-4e30da8a-7441-4381-b779-df28834df824', 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1'\
+           , 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43', 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283']
 
 # matchlist 저장 공간
 matchidlist = list()
@@ -111,18 +111,18 @@ def get_high_summonerid(tier, api_key):
     bufferlist = list_index_remove(bufferlist)
     bufferlist_2 = list_index_remove(bufferlist_2)
 
-    # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 하기 전에 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
-    sql = 'DELETE FROM summoners WHERE nickname = (%s)'
-    cur.executemany(sql, bufferlist_3)
-    con.commit()
-    bufferlist_3.clear()
+    # # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 하기 전에 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
+    # sql = 'DELETE FROM summoners WHERE nickname = (%s)'
+    # cur.executemany(sql, bufferlist_3)
+    # con.commit()
+    # bufferlist_3.clear()
 
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
             
-    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
+    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s) ON DUPLICATE KEY UPDATE patch_version = ' + "'" + patch_version + "'"
     cur.executemany(sql, bufferlist_2)
     con.commit()
     bufferlist_2.clear()
@@ -177,14 +177,14 @@ def get_high_summonerid_2(tier, api_key):
     bufferlist = list_index_remove(bufferlist)
     bufferlist_2 = list_index_remove(bufferlist_2)
 
-    # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 전 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
-    sql = 'DELETE FROM summoners WHERE nickname = (%s)'
-    cur.executemany(sql, bufferlist_3)
-    con.commit()
-    bufferlist_3.clear()
+    # # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 전 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
+    # sql = 'DELETE FROM summoners WHERE nickname = (%s)'
+    # cur.executemany(sql, bufferlist_3)
+    # con.commit()
+    # bufferlist_3.clear()
 
     # 입력받은 상위티어의 소환사를 모두 가져온 경우
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
@@ -195,11 +195,11 @@ def get_high_summonerid_2(tier, api_key):
     bufferlist_2.clear()
     print(len(r.json()['entries']), "개의 소환사 정보를 DB에 등록하였습니다.")
 
-def get_low_summonerid(tier, api_key):
+def get_low_summonerid(tier, division, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 O
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
     # divisionlist = ['I', 'II', 'III', 'IV']
-    divisionlist = ['I']
+    divisionlist = [division]
     bufferlist = list()
     bufferlist_2 = list()
     bufferlist_3 = list()
@@ -240,13 +240,13 @@ def get_low_summonerid(tier, api_key):
     bufferlist = list_index_remove(bufferlist)
     bufferlist_2 = list_index_remove(bufferlist_2)
     
-    print("DB 데이터를 정리합니다.")
-    # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
-    sql = 'DELETE FROM summoners WHERE nickname in (%s)'
-    cur.executemany(sql, bufferlist_3)
-    con.commit()
-    print("summoners table에 중복된 유저 데이터를 지웠습니다.")
-    bufferlist_3.clear()
+    # print("DB 데이터를 정리합니다.")
+    # # 다른 패치 버젼에서 INSERT FROM summoner을 통해 이미 등록되어 있을 수 있으므로 DELETE 실행
+    # sql = 'DELETE FROM summoners WHERE nickname in (%s)'
+    # cur.executemany(sql, bufferlist_3)
+    # con.commit()
+    # print("summoners table에 중복된 유저 데이터를 지웠습니다.")
+    # bufferlist_3.clear()
 
     # 전 page에서 등록된 경우 혹은 대소문자가 다른 경우, 데이터를 삭제한다.(한 페이지씩 등록할 때 사용)
     # sql = 'DELETE FROM summoners_tier WHERE nickname in (%s) and patch_version = (%s)'
@@ -255,13 +255,13 @@ def get_low_summonerid(tier, api_key):
     # print("summoners_tier table에 중복된 유저 데이터를 지웠습니다.")
     # bufferlist_4.clear()
                     
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s)'
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
     cur.executemany(sql, bufferlist)
     con.commit()
     print("summoners table에 저장하였습니다.")
     bufferlist.clear()
                 
-    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s)'
+    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s) ON DUPLICATE KEY UPDATE patch_version = ' + "'" + patch_version + "'"
     cur.executemany(sql, bufferlist_2)
     con.commit()
     print("summoners_tier table에 저장하였습니다.")
@@ -428,13 +428,13 @@ def get_accountid_2(api_key):
         
         i += 1
 
-def get_matchid(person_num, game_num, game_date):
+def get_matchid(person_num, game_num, game_date, api_key):
     bufferlist = list()
     temp_matchidlist = list()
     new_matchidlist = list()
 
-    sql = 'SELECT account_id, api_number FROM summoners WHERE getmatchid_use is NULL and account_id is NOT NULL'
-    cur.execute(sql)
+    sql = 'SELECT account_id, api_number FROM summoners WHERE getmatchid_use is NULL and account_id is NOT NULL and api_number = (%s)'
+    cur.execute(sql, api_key)
     result = cur.fetchall()
     
     if person_num > len(result):
@@ -984,15 +984,29 @@ def data_analysis(num, api_key):
             bufferlist.clear()
             bufferlist_2.clear()
 
-# get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_low_summonerid('DIAMOND', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 
-# while(True):
-    # get_accountid(50, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
-    # get_matchid(10, 20, 1622613600) 
-get_10_summoners(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
-    # get_overall(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67') 
-    # data_analysis(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_item(20, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+while(True):
+
+    get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+    get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+    # get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+    get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+    get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+    # get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+
+    get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+    get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+    data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+    get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+
+    # get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+    # get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+    # data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+    # get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
