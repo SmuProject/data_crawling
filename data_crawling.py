@@ -117,7 +117,7 @@ def get_high_summonerid(tier, api_key):
     # con.commit()
     # bufferlist_3.clear()
 
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1'
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
@@ -160,7 +160,7 @@ def get_high_summonerid_2(tier, api_key):
         cur.execute(sql, (r.json()['entries'][i]['summonerName'], patch_version))
         result = cur.fetchall()   
         
-        bufferlist.append([r.json()['entries'][i]['summonerId'], r.json()['entries'][i]['summonerName'], api_key])
+        bufferlist.append([r.json()['entries'][i]['summonerId'], r.json()['entries'][i]['summonerName'], api_key, r.json()['entries'][i]['summonerName']])
         bufferlist_3.append(r.json()['entries'][i]['summonerName'])
 
         # 이미 등록된 소환사 이름이 있는 경우
@@ -184,7 +184,7 @@ def get_high_summonerid_2(tier, api_key):
     # bufferlist_3.clear()
 
     # 입력받은 상위티어의 소환사를 모두 가져온 경우
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE nickname = (%s)' 
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
