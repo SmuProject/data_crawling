@@ -140,7 +140,7 @@ def get_low_summonerid(tier, division, api_key):
     # bufferlist_4 = list()
 
     # 실행 날짜 기준으로 해당 티어가 아닌 유저가 존재할 수 있으므로 DELETE 실행
-    sql = 'DELETE FROM summoners_tier WHERE patch_version = (%s) and tier LIKE (%s)'
+    sql = 'DELETE FROM summoners_tier WHERE patch_version = (%s) and tier = (%s)'
     cur.execute(sql, (patch_version, str('%' + tier + division + '%')))
     con.commit()
     
