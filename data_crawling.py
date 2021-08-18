@@ -141,7 +141,7 @@ def get_low_summonerid(tier, division, api_key):
 
     # 실행 날짜 기준으로 해당 티어가 아닌 유저가 존재할 수 있으므로 DELETE 실행
     sql = 'DELETE FROM summoners_tier WHERE patch_version = (%s) and tier LIKE (%s)'
-    cur.execute(sql, (patch_version, str('%' + tier + '%')))
+    cur.execute(sql, (patch_version, str('%' + tier + division + '%')))
     con.commit()
     
     for i in range(len(divisionlist)):
@@ -548,7 +548,7 @@ def get_overall(num, api_key):
         if r.status_code == 429:
             r = limit(r, api)
 
-        print(result[q][0])
+        print(result[q][0], "의 전적 정보를 가져오고 있습니다.")
         for t in range(10): #플레이어들의 전적 가져오기
             pnum = r.json()['participantIdentities'][t]['participantId']
                 
@@ -801,30 +801,30 @@ def data_analysis(num, api_key):
 # get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-# get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 # get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 # get_low_summonerid('PLATINUM', 'I', 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
 
-while(True):
+# while(True):
 
-    get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-    get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-    # get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
-    get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-    get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-    # get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+#     get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+#     get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+#     # get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+#     get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+#     get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+#     # get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
 
-    get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
-    get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
-    data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
-    get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+#     get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+#     get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+#     data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+#     get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
 
-    # get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
-    # get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
-    # data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
-    # get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+#     # get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+#     # get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+#     # data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+#     # get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
 
 # while(True):
     
