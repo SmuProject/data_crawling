@@ -117,7 +117,7 @@ def get_high_summonerid(tier, api_key):
     # con.commit()
     # bufferlist_3.clear()
 
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1'
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'" 
     cur.executemany(sql, bufferlist)
     con.commit()
     bufferlist.clear()
@@ -189,7 +189,7 @@ def get_low_summonerid(tier, division, api_key):
     # print("summoners_tier table에 중복된 유저 데이터를 지웠습니다.")
     # bufferlist_4.clear()
                     
-    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE update_check = 1'
+    sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'"
     cur.executemany(sql, bufferlist)
     con.commit()
     print("summoners table에 저장하였습니다.")
@@ -285,6 +285,7 @@ def get_matchid(person_num, game_num, game_date, api_key):
         if r.status_code == 429:
             r = limit(r, matchid_api)
              
+        print(matchid_api)
         # 한 소환사당 game_num개의 matchidlist 저장 방법 구현
         for j in range(game_num):
 
@@ -336,6 +337,8 @@ def get_10_summoners(num, api_key):
 
     for i in range(num):
         summonername_api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + result[i][0] + '?api_key=' + api_key
+
+        print(summonername_api)
         r = requests.get(summonername_api)
         if r.status_code == 429:
             r = limit(r, summonername_api)
@@ -540,6 +543,7 @@ def get_overall(num, api_key):
         #매치정보 가져오기
         try:
             api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + str(result[q][0]) + '?api_key=' + api_key
+            print(api)
         
         except ValueError:
             print("모든 match_id의 overall을 수집했습니다.")
@@ -801,33 +805,61 @@ def data_analysis(num, api_key):
 # get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 # get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 # get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 # get_low_summonerid('PLATINUM', 'I', 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
 
+while(True):
+
+    try:
+        get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8--34a61be3d7348e67')
+    except KeyError:
+        print("KeyError get_accountid")
+
+    try:
+        get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+    except KeyError:
+        print("KeyError get_accountid")
+    # # get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+    try:
+        get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+    except:
+        print("KeyError get_matchid")
+
+    try:
+        get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+    except:
+        print("KeyError get_matchid")
+    # # get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+
+    try:
+        get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+    except KeyError:
+        print("KeyError get_10_summoners")
+
+    try:
+        get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+    except KeyError:
+        print("KeyError get_overall")
+
+    try:
+        data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+    except KeyError:
+        print("KeyError data_analysis")
+
+    try:
+        get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+    except KeyError:
+        print("KeyError get_item")
+
+    # get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+    # get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+    # data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+    # get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+
 # while(True):
-
-#     get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-#     get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-#     # get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
-#     get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-#     get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-#     # get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
-
-#     get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
-#     get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
-#     data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
-#     get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
-
-#     # get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
-#     # get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
-#     # data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
-#     # get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
-
-# while(True):
-    
 #     # get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
 #     # get_accountid(75, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 #     get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
