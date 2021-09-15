@@ -122,7 +122,7 @@ def get_high_summonerid(tier, api_key):
     con.commit()
     bufferlist.clear()
             
-    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s) ON DUPLICATE KEY UPDATE patch_version = ' + "'" + patch_version + "'"
+    sql = 'INSERT INTO summoners_tier(nickname, tier, patch_version) values(%s, %s, %s) ON DUPLICATE KEY UPDATE patch_version = ' + "'" + patch_version + "'" + "," + "tier = " + "'" + INSERT_tier + "'"
     cur.executemany(sql, bufferlist_2)
     con.commit()
     bufferlist_2.clear()
@@ -200,9 +200,9 @@ def get_low_summonerid(tier, division, api_key):
     con.commit()
     print("summoners_tier table에 저장하였습니다.")
     bufferlist_2.clear()
-           
+
 def get_accountid(num, api_key):
-    sql = 'SELECT encrypt_summoner_id, summoners.nickname FROM summoners JOIN summoners_tier ON summoners.nickname = summoners_tier.nickname and account_id is NULL and api_number = (%s)'
+    sql = 'SELECT encrypt_summoner_id, summoners.nickname FROM summoners JOIN summoners_tier ON summoners.nickname = summoners_tier.nickname and account_id is NULL and api_number = (%s) and patch_version = ' + "'" + patch_version + "'"
     cur.execute(sql, api_key)
     result = cur.fetchall()
     
@@ -217,10 +217,14 @@ def get_accountid(num, api_key):
         if r.status_code == 429:
             r = limit(r, accountid_api)
 
+        elif r.status_code == 400:
+            sql = 'DELETE FROM summoners WHERE nickname = (%s)'
+            cur.execute(sql, result[i][1])
+
         #accountid 저장
         print(result[i][1], "소환사의 account_id를 수집 중입니다.")
-        bufferlist.append((r.json()['accountId'], r.json()['id']))
-        
+        bufferlist.append((r.json()['accountId'], r.json()['id']))    
+
     sql = 'UPDATE summoners SET account_id = (%s) WHERE encrypt_summoner_id in (%s)'
     cur.executemany(sql, bufferlist)
     con.commit()
@@ -345,7 +349,7 @@ def get_10_summoners(num, api_key):
             summonerslist.append([result[i][0], r.json()['participantIdentities'][temp]['player']['summonerName']])
         
         bufferlist.append([1, result[i][0]])
-        print(i+1, '번째 match_id의 소환사 닉네임을 가져오고 있습니다.')
+        print(result[i][0] + '번 match_id의 소환사 닉네임을 가져오고 있습니다.')
 
     sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s) ON DUPLICATE KEY UPDATE update_check = 1'
     cur.executemany(sql, summonerslist)
@@ -799,19 +803,19 @@ def data_analysis(num, api_key):
             bufferlist.clear()
             bufferlist_2.clear()
 
-get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+# get_high_summonerid('challengerleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('grandmasterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_high_summonerid('masterleagues', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'I', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'II', 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+# get_low_summonerid('DIAMOND', 'III', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+# get_low_summonerid('DIAMOND', 'IV', 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
 # get_low_summonerid('PLATINUM', 'I', 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
 
 while(True):
 
     try:
-        get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8--34a61be3d7348e67')
+        get_accountid(75, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
     except KeyError:
         print("KeyError get_accountid")
 
@@ -887,7 +891,7 @@ while(True):
 #     except KeyError:
 #         print("KeyError data_analysis")
 
-#     try:
-#         get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
-#     except KeyError:
-#         print("KeyError get_item")
+#      try:
+    #     get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+    # except KeyError:
+    #     print("KeyError get_item")
