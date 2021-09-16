@@ -9,7 +9,7 @@ patch_version_url = 'https://ddragon.leagueoflegends.com/api/versions.json'
 r = requests.get(patch_version_url)
 patch_version = r.json()[0]
 
-# API 키(앞 2개 소환사 정보 수집 전용)
+# API 키(앞 3개 소환사 정보 수집 전용, 뒤 2개 데이터 분석 전용)
 api_keys = ['RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67','RGAPI-4e30da8a-7441-4381-b779-df28834df824', 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1'\
            , 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43', 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283']
 
@@ -44,14 +44,13 @@ cur = con.cursor()
 queue = 'RANKED_SOLO_5x5'
 
 def limit(r, api):
-    print("속도 제한이 걸려 sleep 상태로 변경됩니다.")
+
+    print('HTTP 응답 결과는 ' + str(r.status_code) + '상태입니다.')
 
     while r.status_code == 429:
-        print("10초만 기다려 주세요.")
-        time.sleep(10)
+        print("5초만 기다려 주세요.")
+        time.sleep(5)
         r = requests.get(api)
-        
-    print("속도 제한이 풀려 sleep 상태를 해제합니다.")
 
     return r
 
@@ -76,7 +75,8 @@ def get_high_summonerid(tier, api_key):
     # 데이터 저장 전, 저장되어 있던 데이터 삭제 O
     # 데이터를 수집할 소환사의 summonerId와 nickname 수집
 
-    print("소환사의 기본 정보 수집을 시작합니다.")
+    print("Start get_high_summonerid")
+
     leagues_api = 'https://kr.api.riotgames.com/lol/league/v4/' + tier + '/by-queue/' + queue + '?api_key=' + api_key
     r = requests.get(leagues_api)
     if r.status_code == 429:
@@ -110,12 +110,6 @@ def get_high_summonerid(tier, api_key):
     # 중복 제거
     bufferlist = list_index_remove(bufferlist)
     bufferlist_2 = list_index_remove(bufferlist_2)
-
-    # # summoners_tier table의 중복을 확인한 것이므로 summoners table에 등록 하기 전에 제거를 해줘야 pymysql.err.IntegrityError가 발생하지 않는다.
-    # sql = 'DELETE FROM summoners WHERE nickname = (%s)'
-    # cur.executemany(sql, bufferlist_3)
-    # con.commit()
-    # bufferlist_3.clear()
 
     sql = 'INSERT INTO summoners(encrypt_summoner_id, nickname, api_number) values(%s, %s, %s) ON DUPLICATE KEY UPDATE api_number = ' + "'" + api_key + "'" 
     cur.executemany(sql, bufferlist)
@@ -202,11 +196,14 @@ def get_low_summonerid(tier, division, api_key):
     bufferlist_2.clear()
 
 def get_accountid(num, api_key):
+    print("Start get_accountid")
+    
     sql = 'SELECT encrypt_summoner_id, summoners.nickname FROM summoners JOIN summoners_tier ON summoners.nickname = summoners_tier.nickname and account_id is NULL and api_number = (%s) and patch_version = ' + "'" + patch_version + "'"
     cur.execute(sql, api_key)
     result = cur.fetchall()
-    
+
     bufferlist = list()
+    temp_api_key = ''
 
     if num > len(result):
         num = len(result)
@@ -217,9 +214,19 @@ def get_accountid(num, api_key):
         if r.status_code == 429:
             r = limit(r, accountid_api)
 
-        elif r.status_code == 400:
-            sql = 'DELETE FROM summoners WHERE nickname = (%s)'
-            cur.execute(sql, result[i][1])
+        while(r.status_code == 400):
+            if(api_key == api_keys[0] or temp_api_key == api_keys[0]):
+                temp_api_key = api_keys[1]
+              
+            elif(api_key == api_keys[1] or temp_api_key == api_keys[1]):
+                temp_api_key = api_keys[2]
+
+            elif(api_key == api_keys[2] or temp_api_key == api_keys[2]):
+                temp_api_key = api_keys[0]
+
+            accountid_api = 'https://kr.api.riotgames.com/lol/summoner/v4/summoners/' + result[i][0] + '?api_key=' + temp_api_key
+            r = requests.get(accountid_api)
+            print(accountid_api)
 
         #accountid 저장
         print(result[i][1], "소환사의 account_id를 수집 중입니다.")
@@ -270,9 +277,14 @@ def get_accountid_2(api_key):
         i += 1
 
 def get_matchid(person_num, game_num, game_date, api_key):
+
+    print("Start get_matchid")
+    print("Waiting..")
+
     bufferlist = list()
     temp_matchidlist = list()
     new_matchidlist = list()
+    temp_api_key = ''
 
     sql = 'SELECT account_id, api_number FROM summoners WHERE getmatchid_use is NULL and account_id is NOT NULL and api_number = (%s)'
     cur.execute(sql, api_key)
@@ -281,33 +293,64 @@ def get_matchid(person_num, game_num, game_date, api_key):
     if person_num > len(result):
         person_num = len(result)
 
-    # N명의 소환사 검색
-    for i in range(person_num):
-        #소환사 선택
-        matchid_api = 'https://kr.api.riotgames.com/lol/match/v4/matchlists/by-account/' + result[i][0] + '?api_key=' + result[i][1]
-        r = requests.get(matchid_api)
-        if r.status_code == 429:
-            r = limit(r, matchid_api)
-             
-        # 한 소환사당 game_num개의 matchidlist 저장 방법 구현
-        for j in range(game_num):
+    try:
+        # N명의 소환사 검색
+        for i in range(person_num):
+            #소환사 선택
+            matchid_api = 'https://kr.api.riotgames.com/lol/match/v4/matchlists/by-account/' + result[i][0] + '?api_key=' + result[i][1]
+            r = requests.get(matchid_api)
+            # print(matchid_api)
+            if r.status_code == 429:
+                r = limit(r, matchid_api)
+            
+            temp_api_key = result[i][1]
 
-            # 특정 시간 이후
-            try:
+            while(r.status_code == 400):
+                print('400상태 시작')
+                if(temp_api_key == api_keys[0]):
+                    temp_api_key = api_keys[1]
+
+                elif(temp_api_key == api_keys[1]):
+                    temp_api_key = api_keys[2]
+        
+                elif(temp_api_key == api_keys[2]):
+                    temp_api_key = api_keys[0]
+
+                matchid_api = 'https://kr.api.riotgames.com/lol/match/v4/matchlists/by-account/' + result[i][0] + '?api_key=' + temp_api_key
+
+                r = requests.get(matchid_api)
+                print(matchid_api)
+                print('400상태 종료')
+
+            # 한 소환사당 game_num개의 matchidlist 저장 방법 구현
+            for j in range(game_num):
+                # 특정 시간 이후
+                # try:
                 if r.json()['matches'][j]['timestamp'] >= game_date and r.json()['matches'][j]['queue'] == 420 :
                     matchidlist.append(r.json()['matches'][j]['gameId'])
-                    print("조건에 맞는 match_id를 찾았습니다.")
-                elif r.json()['matches'][j]['timestamp'] < game_date:
-                    print(datetime.datetime.fromtimestamp(game_date/1000), "이후의 게임이 없습니다..")
-                elif r.json()['matches'][j]['queue'] != 420:
-                    print('솔로 랭크가 아닙니다.')
-                    
-            except IndexError:
-                print('해당 유저의 게임 경기 수가 충분하지 않습니다.')
-                break
-        # gamematchid_use 등록
-        bufferlist.append([1, result[i][0]])
+                    # print(r.json()['matches'][j]['gameId'])
+                        # print("조건에 맞는 match_id를 찾았습니다.")
+                    # elif r.json()['matches'][j]['timestamp'] < game_date:
+                    #     print(datetime.datetime.fromtimestamp(game_date/1000), "이후의 게임이 없습니다..")
+                    # elif r.json()['matches'][j]['queue'] != 420:
+                    #     print('솔로 랭크가 아닙니다.')
+                        
+                # except KeyError:
+                #     # print('해당 유저의 게임 경기 수가 충분하지 않습니다.')
+                #     if((j+1) < game_num):
+                #         print("게임 수 부족")
 
+                    # break
+            # gamematchid_use 등록
+            bufferlist.append([1, result[i][0]])
+
+    except KeyError:
+      print("KeyError get_matchid")
+      print("통신 문제로 KeyError가 발생했습니다.")
+      print("에러 발생 전 까지의 데이터를 DB에 등록 중입니다.")
+
+
+    # finally:
     # matchidlist의 중복 요소 제거 
     for matchid in matchidlist:
         if matchid not in temp_matchidlist:
@@ -327,7 +370,7 @@ def get_matchid(person_num, game_num, game_date, api_key):
     print("DB에 match_id를 등록하였습니다.")
 
 def get_10_summoners(num, api_key):
-    print("한 게임당 10명의 소환사 닉네임 수집을 시작합니다.")
+    print("Start Get_10_summoners")
     sql = 'SELECT match_id FROM matches WHERE get10summoners_use is NULL'
     cur.execute(sql)
     result = cur.fetchall()
@@ -340,16 +383,17 @@ def get_10_summoners(num, api_key):
 
     for i in range(num):
         summonername_api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + result[i][0] + '?api_key=' + api_key
-
+        # print(summonername_api)
         r = requests.get(summonername_api)
         if r.status_code == 429:
             r = limit(r, summonername_api)
 
-        for temp in range(10):
-            summonerslist.append([result[i][0], r.json()['participantIdentities'][temp]['player']['summonerName']])
+        for j in range(10):
+            summonerslist.append([result[i][0], r.json()['participantIdentities'][j]['player']['summonerName']])
         
         bufferlist.append([1, result[i][0]])
         print(result[i][0] + '번 match_id의 소환사 닉네임을 가져오고 있습니다.')
+
 
     sql = 'INSERT match_summoners SET match_id = (%s), nickname = (%s) ON DUPLICATE KEY UPDATE update_check = 1'
     cur.executemany(sql, summonerslist)
@@ -372,6 +416,7 @@ def get_10_summoners(num, api_key):
     print("등록한 10명의 소환사의 티어를 UPDATE 하였습니다.")
             
 def get_item(num, api_key):
+    print("Start get_item")
     sql = 'SELECT match_id FROM matches WHERE getitem_use is NULL'
     cur.execute(sql)
     result = cur.fetchall() 
@@ -468,7 +513,7 @@ def get_item(num, api_key):
                         except ValueError:
                             continue
 
-            print(i+1, '번째의 frame 이벤트를 모두 검색하였습니다.')
+            # print(i+1, '번째의 frame 이벤트를 모두 검색하였습니다.')
         print('matchid ' + result[k][0] + '의 아이템 목록을 정리했습니다.')
 
         # 코어템 저장 및 중복 제거
@@ -528,6 +573,7 @@ def get_item(num, api_key):
     print("코어 아이템 테이블에 데이터를 넣었습니다.")
 
 def get_overall(num, api_key):
+    print("Start get_overall")
     #매치 테이블에서 매치아이디 가져오기
     sql = 'SELECT match_id FROM matches WHERE overall_use is NULL'
     cur.execute(sql)
@@ -550,153 +596,160 @@ def get_overall(num, api_key):
             print("모든 match_id의 overall을 수집했습니다.")
             break
         r = requests.get(api)
+        # print(api)
         if r.status_code == 429:
             r = limit(r, api)
 
         print(result[q][0], "의 전적 정보를 가져오고 있습니다.")
-        for t in range(10): #플레이어들의 전적 가져오기
-            pnum = r.json()['participantIdentities'][t]['participantId']
-                
-            # 이름 구하기
-            name = r.json()['participantIdentities'][pnum - 1]['player']['summonerName']
-        
-            # 게임이 만들어진 시간, 플레이한 시간
-            gameCreation = r.json()['gameCreation']
-            gameDuration = r.json()['gameDuration']
-                
-            # 아이템
-            item0 = r.json()['participants'][pnum - 1]['stats']['item0']
-            item1 = r.json()['participants'][pnum - 1]['stats']['item1']
-            item2 = r.json()['participants'][pnum - 1]['stats']['item2']
-            item3 = r.json()['participants'][pnum - 1]['stats']['item3']
-            item4 = r.json()['participants'][pnum - 1]['stats']['item4']
-            item5 = r.json()['participants'][pnum - 1]['stats']['item5']
-            item6 = r.json()['participants'][pnum - 1]['stats']['item6']
-    
-            # 승패
-            if r.json()['participants'][pnum - 1]['stats']['win'] == 1:
-                win = 'Win'
-            
-            else:
-                win = 'Lose'
-    
-            # KDA
-            kills = r.json()['participants'][pnum - 1]['stats']['kills']
-            deaths = r.json()['participants'][pnum - 1]['stats']['deaths']
-            assists = r.json()['participants'][pnum - 1]['stats']['assists']
-        
-            # CS
-            neutralMinionsKilled = r.json()['participants'][pnum - 1]['stats']['neutralMinionsKilled']
-            totalMinionsKilled = r.json()['participants'][pnum - 1]['stats']['totalMinionsKilled']
-        
-            # 챔피언레벨
-            champLevel = r.json()['participants'][pnum - 1]['stats']['champLevel']
-        
-            # 챔피언이 입힌 데미지
-            totalDamageDealtToChampions = r.json()['participants'][pnum - 1]['stats']['totalDamageDealtToChampions']
-        
-            # 총피해량, 마법, 물리
-            totalDamageDealt = r.json()['participants'][pnum - 1]['stats']['totalDamageDealt']
-            magicDamageDealt = r.json()['participants'][pnum - 1]['stats']['magicDamageDealt']
-            physicalDamageDealt = r.json()['participants'][pnum - 1]['stats']['physicalDamageDealt']
-        
-            # 총 입은 피해량
-            totalDamageTaken = r.json()['participants'][pnum - 1]['stats']['totalDamageTaken']
-        
-            # 시간대별 분당 골드 획득량
-            # 획득량 초기화
-            gold0to10 = 0
-            gold10to20 = 0
-            gold20to30 = 0
-            gold30toend = 0
-            if "goldPerMinDeltas" in r.json()['participants'][pnum - 1]['timeline']:
-                if "0-10" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
-                    gold0to10 = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['0-10']
-                else:
-                    pass
-                
-                if "10-20" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
-                    gold10to20 = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['10-20']
-                else:
-                    pass
-                
-                if "20-30" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
-                    gold20to30 = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['20-30']
-                else:
-                    pass
-                
-                if "30-end" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
-                    gold30toend = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['30-end']
-                else:
-                    pass
-                    
-            else:  # 10분 이전에 경기 끝나는 것 걸러내기
-                pass
-        
-            # 스펠
-            spell1Id = r.json()['participants'][pnum - 1]['spell1Id']
-            spell2Id = r.json()['participants'][pnum - 1]['spell2Id']
-        
-            # 룬
-            perk0 = r.json()['participants'][pnum - 1]['stats']['perk0']
-            perk0Var1 = r.json()['participants'][pnum - 1]['stats']['perk0Var1']
-            perk0Var2 = r.json()['participants'][pnum - 1]['stats']['perk0Var2']
-            perk0Var3 = r.json()['participants'][pnum - 1]['stats']['perk0Var3']
-            perk1 = r.json()['participants'][pnum - 1]['stats']['perk1']
-            perk1Var1 = r.json()['participants'][pnum - 1]['stats']['perk1Var1']
-            perk1Var2 = r.json()['participants'][pnum - 1]['stats']['perk1Var2']
-            perk1Var3 = r.json()['participants'][pnum - 1]['stats']['perk1Var3']
-            perk2 = r.json()['participants'][pnum - 1]['stats']['perk2']
-            perk2Var1 = r.json()['participants'][pnum - 1]['stats']['perk2Var1']
-            perk2Var2 = r.json()['participants'][pnum - 1]['stats']['perk2Var2']
-            perk2Var3 = r.json()['participants'][pnum - 1]['stats']['perk2Var3']
-            perk3 = r.json()['participants'][pnum - 1]['stats']['perk3']
-            perk3Var1 = r.json()['participants'][pnum - 1]['stats']['perk3Var1']
-            perk3Var2 = r.json()['participants'][pnum - 1]['stats']['perk3Var2']
-            perk3Var3 = r.json()['participants'][pnum - 1]['stats']['perk3Var3']
-            perk4 = r.json()['participants'][pnum - 1]['stats']['perk4']
-            perk4Var1 = r.json()['participants'][pnum - 1]['stats']['perk4Var1']
-            perk4Var2 = r.json()['participants'][pnum - 1]['stats']['perk4Var2']
-            perk4Var3 = r.json()['participants'][pnum - 1]['stats']['perk4Var3']
-            perk5 = r.json()['participants'][pnum - 1]['stats']['perk5']
-            perk5Var1 = r.json()['participants'][pnum - 1]['stats']['perk5Var1']
-            perk5Var2 = r.json()['participants'][pnum - 1]['stats']['perk5Var2']        
-            perk5Var3 = r.json()['participants'][pnum - 1]['stats']['perk5Var3']
-            perkPrimaryStyle = r.json()['participants'][pnum - 1]['stats']['perkPrimaryStyle']
-            perkSubStyle = r.json()['participants'][pnum - 1]['stats']['perkSubStyle']
-            statPerk0 = r.json()['participants'][pnum - 1]['stats']['statPerk0']
-            statPerk1 = r.json()['participants'][pnum - 1]['stats']['statPerk1']
-            statPerk2 = r.json()['participants'][pnum - 1]['stats']['statPerk2']
 
-            # 같이 게임한 사람들의 챔피언 번호(본인 포함)
-            myChamp = r.json()['participants'][pnum - 1]['championId']
-            participant1 = r.json()['participants'][0]['championId']
-            participant2 = r.json()['participants'][1]['championId']
-            participant3 = r.json()['participants'][2]['championId']
-            participant4 = r.json()['participants'][3]['championId']
-            participant5 = r.json()['participants'][4]['championId']
-            participant6 = r.json()['participants'][5]['championId']
-            participant7 = r.json()['participants'][6]['championId']
-            participant8 = r.json()['participants'][7]['championId']
-            participant9 = r.json()['participants'][8]['championId']
-            participant10 = r.json()['participants'][9]['championId']
-        
-            # 챔피언 롤, 레인
-            champRole = r.json()['participants'][pnum - 1]['timeline']['role']
-            champLane = r.json()['participants'][pnum - 1]['timeline']['lane']
-                
-            overalllist.append([result[q][0], name, str(gameCreation), str(gameDuration), str(champRole), str(champLane), win, item0, item1, item2, item3, item4, \
-                item5, item6, int(kills), int(deaths), int(assists), int(neutralMinionsKilled), int(totalMinionsKilled), \
-                int(champLevel), int(totalDamageDealtToChampions), int(totalDamageDealt), int(magicDamageDealt), int(physicalDamageDealt), \
-                int(totalDamageTaken), int(gold0to10), int(gold10to20), int(gold20to30), int(gold30toend), int(spell1Id), int(spell2Id), int(perk0), int(perk0Var1), int(perk0Var2), int(perk0Var3), \
-                int(perk1), int(perk1Var1), int(perk1Var2), int(perk1Var3), int(perk2), int(perk2Var1), int(perk2Var2), int(perk2Var3), int(perk3), \
-                int(perk3Var1), int(perk3Var2), int(perk3Var3), \
-                int(perk4), int(perk4Var1), int(perk4Var2), int(perk4Var3), int(perk5), int(perk5Var1), int(perk5Var2), \
-                int(perk5Var3), int(perkPrimaryStyle), int(perkSubStyle), int(statPerk0), int(statPerk1), int(statPerk2), \
-                int(myChamp), int(participant1), int(participant2), int(participant3), int(participant4), int(participant5), int(participant6), int(participant7), int(participant8), int(participant9), int(participant10), patch_version])
-                
-            bufferlist.append((1, result[q][0]))
+        try:
+            for t in range(10): #플레이어들의 전적 가져오기
+                pnum = r.json()['participantIdentities'][t]['participantId']
+                    
+                # 이름 구하기
+                name = r.json()['participantIdentities'][pnum - 1]['player']['summonerName']
             
+                # 게임이 만들어진 시간, 플레이한 시간
+                gameCreation = r.json()['gameCreation']
+                gameDuration = r.json()['gameDuration']
+                    
+                # 아이템
+                item0 = r.json()['participants'][pnum - 1]['stats']['item0']
+                item1 = r.json()['participants'][pnum - 1]['stats']['item1']
+                item2 = r.json()['participants'][pnum - 1]['stats']['item2']
+                item3 = r.json()['participants'][pnum - 1]['stats']['item3']
+                item4 = r.json()['participants'][pnum - 1]['stats']['item4']
+                item5 = r.json()['participants'][pnum - 1]['stats']['item5']
+                item6 = r.json()['participants'][pnum - 1]['stats']['item6']
+        
+                # 승패
+                if r.json()['participants'][pnum - 1]['stats']['win'] == 1:
+                    win = 'Win'
+                
+                else:
+                    win = 'Lose'
+        
+                # KDA
+                kills = r.json()['participants'][pnum - 1]['stats']['kills']
+                deaths = r.json()['participants'][pnum - 1]['stats']['deaths']
+                assists = r.json()['participants'][pnum - 1]['stats']['assists']
+            
+                # CS
+                neutralMinionsKilled = r.json()['participants'][pnum - 1]['stats']['neutralMinionsKilled']
+                totalMinionsKilled = r.json()['participants'][pnum - 1]['stats']['totalMinionsKilled']
+            
+                # 챔피언레벨
+                champLevel = r.json()['participants'][pnum - 1]['stats']['champLevel']
+            
+                # 챔피언이 입힌 데미지
+                totalDamageDealtToChampions = r.json()['participants'][pnum - 1]['stats']['totalDamageDealtToChampions']
+            
+                # 총피해량, 마법, 물리
+                totalDamageDealt = r.json()['participants'][pnum - 1]['stats']['totalDamageDealt']
+                magicDamageDealt = r.json()['participants'][pnum - 1]['stats']['magicDamageDealt']
+                physicalDamageDealt = r.json()['participants'][pnum - 1]['stats']['physicalDamageDealt']
+            
+                # 총 입은 피해량
+                totalDamageTaken = r.json()['participants'][pnum - 1]['stats']['totalDamageTaken']
+            
+                # 시간대별 분당 골드 획득량
+                # 획득량 초기화
+                gold0to10 = 0
+                gold10to20 = 0
+                gold20to30 = 0
+                gold30toend = 0
+                if "goldPerMinDeltas" in r.json()['participants'][pnum - 1]['timeline']:
+                    if "0-10" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
+                        gold0to10 = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['0-10']
+                    else:
+                        pass
+                    
+                    if "10-20" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
+                        gold10to20 = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['10-20']
+                    else:
+                        pass
+                    
+                    if "20-30" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
+                        gold20to30 = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['20-30']
+                    else:
+                        pass
+                    
+                    if "30-end" in r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']:
+                        gold30toend = r.json()['participants'][pnum - 1]['timeline']['goldPerMinDeltas']['30-end']
+                    else:
+                        pass
+                        
+                else:  # 10분 이전에 경기 끝나는 것 걸러내기
+                    pass
+            
+                # 스펠
+                spell1Id = r.json()['participants'][pnum - 1]['spell1Id']
+                spell2Id = r.json()['participants'][pnum - 1]['spell2Id']
+            
+                # 룬
+                perk0 = r.json()['participants'][pnum - 1]['stats']['perk0']
+                perk0Var1 = r.json()['participants'][pnum - 1]['stats']['perk0Var1']
+                perk0Var2 = r.json()['participants'][pnum - 1]['stats']['perk0Var2']
+                perk0Var3 = r.json()['participants'][pnum - 1]['stats']['perk0Var3']
+                perk1 = r.json()['participants'][pnum - 1]['stats']['perk1']
+                perk1Var1 = r.json()['participants'][pnum - 1]['stats']['perk1Var1']
+                perk1Var2 = r.json()['participants'][pnum - 1]['stats']['perk1Var2']
+                perk1Var3 = r.json()['participants'][pnum - 1]['stats']['perk1Var3']
+                perk2 = r.json()['participants'][pnum - 1]['stats']['perk2']
+                perk2Var1 = r.json()['participants'][pnum - 1]['stats']['perk2Var1']
+                perk2Var2 = r.json()['participants'][pnum - 1]['stats']['perk2Var2']
+                perk2Var3 = r.json()['participants'][pnum - 1]['stats']['perk2Var3']
+                perk3 = r.json()['participants'][pnum - 1]['stats']['perk3']
+                perk3Var1 = r.json()['participants'][pnum - 1]['stats']['perk3Var1']
+                perk3Var2 = r.json()['participants'][pnum - 1]['stats']['perk3Var2']
+                perk3Var3 = r.json()['participants'][pnum - 1]['stats']['perk3Var3']
+                perk4 = r.json()['participants'][pnum - 1]['stats']['perk4']
+                perk4Var1 = r.json()['participants'][pnum - 1]['stats']['perk4Var1']
+                perk4Var2 = r.json()['participants'][pnum - 1]['stats']['perk4Var2']
+                perk4Var3 = r.json()['participants'][pnum - 1]['stats']['perk4Var3']
+                perk5 = r.json()['participants'][pnum - 1]['stats']['perk5']
+                perk5Var1 = r.json()['participants'][pnum - 1]['stats']['perk5Var1']
+                perk5Var2 = r.json()['participants'][pnum - 1]['stats']['perk5Var2']        
+                perk5Var3 = r.json()['participants'][pnum - 1]['stats']['perk5Var3']
+                perkPrimaryStyle = r.json()['participants'][pnum - 1]['stats']['perkPrimaryStyle']
+                perkSubStyle = r.json()['participants'][pnum - 1]['stats']['perkSubStyle']
+                statPerk0 = r.json()['participants'][pnum - 1]['stats']['statPerk0']
+                statPerk1 = r.json()['participants'][pnum - 1]['stats']['statPerk1']
+                statPerk2 = r.json()['participants'][pnum - 1]['stats']['statPerk2']
+
+                # 같이 게임한 사람들의 챔피언 번호(본인 포함)
+                myChamp = r.json()['participants'][pnum - 1]['championId']
+                participant1 = r.json()['participants'][0]['championId']
+                participant2 = r.json()['participants'][1]['championId']
+                participant3 = r.json()['participants'][2]['championId']
+                participant4 = r.json()['participants'][3]['championId']
+                participant5 = r.json()['participants'][4]['championId']
+                participant6 = r.json()['participants'][5]['championId']
+                participant7 = r.json()['participants'][6]['championId']
+                participant8 = r.json()['participants'][7]['championId']
+                participant9 = r.json()['participants'][8]['championId']
+                participant10 = r.json()['participants'][9]['championId']
+            
+                # 챔피언 롤, 레인
+                champRole = r.json()['participants'][pnum - 1]['timeline']['role']
+                champLane = r.json()['participants'][pnum - 1]['timeline']['lane']
+                    
+                overalllist.append([result[q][0], name, str(gameCreation), str(gameDuration), str(champRole), str(champLane), win, item0, item1, item2, item3, item4, \
+                    item5, item6, int(kills), int(deaths), int(assists), int(neutralMinionsKilled), int(totalMinionsKilled), \
+                    int(champLevel), int(totalDamageDealtToChampions), int(totalDamageDealt), int(magicDamageDealt), int(physicalDamageDealt), \
+                    int(totalDamageTaken), int(gold0to10), int(gold10to20), int(gold20to30), int(gold30toend), int(spell1Id), int(spell2Id), int(perk0), int(perk0Var1), int(perk0Var2), int(perk0Var3), \
+                    int(perk1), int(perk1Var1), int(perk1Var2), int(perk1Var3), int(perk2), int(perk2Var1), int(perk2Var2), int(perk2Var3), int(perk3), \
+                    int(perk3Var1), int(perk3Var2), int(perk3Var3), \
+                    int(perk4), int(perk4Var1), int(perk4Var2), int(perk4Var3), int(perk5), int(perk5Var1), int(perk5Var2), \
+                    int(perk5Var3), int(perkPrimaryStyle), int(perkSubStyle), int(statPerk0), int(statPerk1), int(statPerk2), \
+                    int(myChamp), int(participant1), int(participant2), int(participant3), int(participant4), int(participant5), int(participant6), int(participant7), int(participant8), int(participant9), int(participant10), patch_version])
+                    
+                bufferlist.append((1, result[q][0]))
+        
+        except KeyError:
+            sql = "DELETE FROM matches where match_id = " + result[q][0]
+            cur.execute(sql)
+
         if (q+1) % 80 == 0 or (q+1) == num:
             sql = '''INSERT INTO overall(match_id, name, game_creation, game_duration, champ_role, champ_lane, win, item_0, item_1, item_2, item_3,\
                 item_4, item_5, item_6, kills, deaths, assists, neutral_minions_killed, total_minions_killed, champ_level, \
@@ -715,6 +768,8 @@ def get_overall(num, api_key):
             bufferlist.clear()
 
 def data_analysis(num, api_key):
+    print("Start data_analysis")
+    
     bufferlist = list()
     bufferlist_2 = list()
     num_2 = int()
@@ -731,6 +786,7 @@ def data_analysis(num, api_key):
     for i in range(num_2):
 
         api = 'https://kr.api.riotgames.com/lol/match/v4/matches/' + result[i][0] + '?api_key=' + api_key
+      
         r = requests.get(api)
         if r.status_code == 429:
             r = limit(r, api)
@@ -826,35 +882,35 @@ while(True):
 
 
 
-    try:
-        get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
-    except:
-        print("KeyError get_matchid")
+    # try:
+    get_matchid(25, 20, 1622613600, 'RGAPI-de6db5ca-44d5-4dc8-be3d-34a617348e67')
+    # except:
+        # print("KeyError get_matchid")
+
+    # try:
+    get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
+    # except:
+    #     print("KeyError get_matchid")
+
+
 
     try:
-        get_matchid(25, 20, 1622613600, 'RGAPI-4e30da8a-7441-4381-b779-df28834df824')
-    except:
-        print("KeyError get_matchid")
-
-
-
-    try:
-        get_10_summoners(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+        get_10_summoners(28, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
     except KeyError:
         print("KeyError get_10_summoners")
 
     try:
-        get_overall(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43') 
+      get_overall(28, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
     except KeyError:
         print("KeyError get_overall")
 
     try:
-        data_analysis(30, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+        data_analysis(28, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
     except KeyError:
         print("KeyError data_analysis")
 
     try:
-        get_item(10, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
+        get_item(12, 'RGAPI-856ad351-d275-43e1-ad28-06e4a40e9b43')
     except KeyError:
         print("KeyError get_item")
 
@@ -862,36 +918,54 @@ while(True):
 
 
 # while(True):
-#     try:
-#         get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
-#     except KeyError:
-#         print("KeyError get_accountid")
+    # try:
+        # get_accountid(75, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+    # except KeyError:
+    #     print("KeyError get_accountid")
+    #     print("KeyError get_accountid")
+    #     print("KeyError get_accountid")
+    #     print("KeyError get_accountid")
 
 
 
-#     try:
-#         get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
-#     except:
-#         print("KeyError get_matchid")
+    # try:
+    #     get_matchid(25, 20, 1622613600, 'RGAPI-3eb981c2-1f8a-41fc-93f9-a51f6999fee1')
+    # except:
+    #     print("KeyError get_matchid")
+    #     print("KeyError get_matchid")
+    #     print("KeyError get_matchid")
+    #     print("KeyError get_matchid")
 
 
 
-#     try:
-#         get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
-#     except KeyError:
-#         print("KeyError get_10_summoners")
+    # try:
+    #     get_10_summoners(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+    # except KeyError:
+    #     print("KeyError get_10_summoners")
+    #     print("KeyError get_10_summoners")
+    #     print("KeyError get_10_summoners")
+    #     print("KeyError get_10_summoners")
 
-#     try:
-#         get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
-#     except KeyError:
-#         print("KeyError get_overall")
+    # try:
+    #     get_overall(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283') 
+    # except KeyError:
+    #     print("KeyError get_overall")
+    #     print("KeyError get_overall")
+    #     print("KeyError get_overall")
+    #     print("KeyError get_overall")
 
-#     try:
-#         data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
-#     except KeyError:
-#         print("KeyError data_analysis")
+    # try:
+    #     data_analysis(30, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
+    # except KeyError:
+    #     print("KeyError data_analysis")
+    #     print("KeyError data_analysis")
+    #     print("KeyError data_analysis")
+    #     print("KeyError data_analysis")
 
-#      try:
+    # try:
     #     get_item(10, 'RGAPI-f4956437-ee69-4d26-a270-5f841f4be283')
     # except KeyError:
+    #     print("KeyError get_item")
+    #     print("KeyError get_item")
+    #     print("KeyError get_item")
     #     print("KeyError get_item")
